@@ -1,58 +1,36 @@
 <?php
 namespace App\Http\Controllers;
 
-use App\Models\{Etudiant, Filiere, AnneeScolaire};
+use App\Models\Etudiant;
 use Illuminate\Http\Request;
 
 class EtudiantController extends Controller
 {
-    public function index(Request $request)
+    public function index()
     {
-        $query = Etudiant::with(['inscriptions.filiere', 'inscriptions.anneeScolaire']);
-
-        if ($request->filled('statut'))    $query->where('statut', $request->statut);
-        if ($request->filled('type_acces'))$query->where('type_acces', $request->type_acces);
-        if ($request->filled('search'))    $query->where(fn($q) =>
-            $q->where('nom', 'like', "%{$request->search}%")
-              ->orWhere('prenom', 'like', "%{$request->search}%")
-              ->orWhere('CNE', 'like', "%{$request->search}%")
-        );
-
-        $etudiants = $query->orderBy('nom')->paginate(25)->withQueryString();
-
-        return view('etudiants.index', compact('etudiants'));
+        return Etudiant::with('filiere')->get();
     }
 
-    public function show(Etudiant $etudiant)
+    public function store(Request $request)
     {
-        $etudiant->load(['inscriptions.filiere', 'inscriptions.anneeScolaire',
-                         'validations.module', 'validations.anneeScolaire', 'abandons']);
-        return view('etudiants.show', compact('etudiant'));
+        return Etudiant::create($request->all());
     }
 
-    // Stats : inscrits à cheval (ex: S1 et S3 en même année)
-    public function achevale(Request $request)
+    public function show($id)
     {
-        $anneeId = $request->get('annee_id', AnneeScolaire::encours()?->id);
+        return Etudiant::findOrFail($id);
+    }
 
-        $achevalePairs = [
-            [1, 3], [3, 5], [2, 4], [4, 6]
-        ];
+    public function update(Request $request, $id)
+    {
+        $e = Etudiant::findOrFail($id);
+        $e->update($request->all());
+        return $e;
+    }
 
-        $results = [];
-        foreach ($achevalePairs as [$s1, $s2]) {
-            $ids1 = Inscription::where('annee_id', $anneeId)->where('semestre', $s1)->pluck('etudiant_id');
-            $ids2 = Inscription::where('annee_id', $anneeId)->where('semestre', $s2)->pluck('etudiant_id');
-            $communs = $ids1->intersect($ids2);
-
-            $results[] = [
-                'label' => "S{$s1} & S{$s2}",
-                'count' => $communs->count(),
-                'etudiants' => Etudiant::whereIn('id', $communs)->get(),
-            ];
-        }
-
-        $annees = AnneeScolaire::orderByDesc('libelle')->get();
-        return view('etudiants.achevale', compact('results', 'annees', 'anneeId'));
+    public function destroy($id)
+    {
+        Etudiant::destroy($id);
+        return response()->json(['ok']);
     }
 }
